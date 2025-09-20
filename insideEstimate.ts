@@ -109,6 +109,91 @@ function haversineMeters(a: LatLng, b: LatLng): number {
     return duration; // seconds
   }
 
+
+//main api
+//exports async function to compute eta
+//return total time components, entrance chosen, vertical mode
+export async function estimateETAsec(opts: EstimateOptions): Promise<{
+    totalSec: number;
+    totalMins: number; //added later
+    breakdown: {
+      outdoorSec: number;
+      indoorTransitionSec: number;
+      indoorHorizontalSec: number;
+      verticalSec: number;
+      wayfindingSec: number;
+    };
+    entranceUsed: BuildingEntrance;
+    verticalModeResolved: VerticalMode;
+  }> {
+    // defaults (indoor)
+    const ind = {
+      verticalMode: opts.indoor?.verticalMode ?? "stairs",
+      stairsSecondsPerFloor: opts.indoor?.stairsSecondsPerFloor ?? null,
+      elevatorWaitSeconds: opts.indoor?.elevatorWaitSeconds ?? 30,
+      elevatorSecPerFloor: opts.indoor?.elevatorSecPerFloor ?? 2.5,
+      elevatorDoorSeconds: opts.indoor?.elevatorDoorSeconds ?? 8,
+      indoorWalkSpeedMps: opts.indoor?.indoorWalkSpeedMps ?? 1.1,
+      transitionPenaltySec: opts.indoor?.transitionPenaltySec ?? 12,
+      wayfindingPenaltySec: opts.indoor?.wayfindingPenaltySec ?? 8,
+    };
+  
+    const entrance =
+      (opts.preferredEntranceId
+        ? opts.building.entrances.find(e => e.id === opts.preferredEntranceId)
+        : pickEntrance(opts.origin, opts.building.entrances)) || opts.building.entrances[0];
+  
+    // outdoor duration time
+    let outdoorSec = opts.precomputedOutdoorDurationSec ?? 0;
+    if (outdoorSec === 0) {
+      outdoorSec = await getOutdoorDurationSec(opts.origin, entrance.location, opts.outdoor);
+    }
+  
+    // indoor horizontal time
+    const indoorToCoreM = opts.indoorToCoreMetersOverride ?? (opts.building.avgIndoorToCoreMeters ?? 35);
+    const coreToDestM   = opts.coreToDestMetersOverride ?? (opts.building.avgCoreToDestMeters ?? 35);
+    const indoorHorizontalSec = (indoorToCoreM + coreToDestM) / ind.indoorWalkSpeedMps;
+  
+    // indoor vertical time
+    const floorH = opts.building.floorHeightMeters ?? 3.8;
+    const floorsToClimb = Math.max(0, opts.targetFloor - (entrance.entranceFloor ?? 1));
+    let verticalModeResolved: VerticalMode = ind.verticalMode;
+    if (ind.verticalMode === "auto") {
+      verticalModeResolved = floorsToClimb >= 5 ? "elevator" : "stairs";
+    }
+    let verticalSec = 0;
+    if (floorsToClimb > 0) {
+      if (verticalModeResolved === "stairs") {
+        if (ind.stairsSecondsPerFloor) {
+          verticalSec = floorsToClimb * ind.stairsSecondsPerFloor;
+        } else {
+          const stairV = 0.30; // m/s (brisk)
+          verticalSec = (floorsToClimb * floorH) / stairV;
+        }
+      } else {
+        verticalSec = ind.elevatorWaitSeconds + floorsToClimb * ind.elevatorSecPerFloor + ind.elevatorDoorSeconds;
+      }
+    }
+  
+    //constants
+    //adjusts time based on human dilly dally/ etc
+    const indoorTransitionSec = ind.transitionPenaltySec;
+    const wayfindingSec = ind.wayfindingPenaltySec;
+  
+    //sum of all components
+    const totalSec = outdoorSec + indoorTransitionSec + indoorHorizontalSec + verticalSec + wayfindingSec;
+    const totalMins= Math.ceil(totalSec/60)
+  
+    //returns total time, breakdown for our debugging, entrance, and which vertical mode chosen
+    return {
+      totalSec,
+      totalMins,
+      breakdown: { outdoorSec, indoorTransitionSec, indoorHorizontalSec, verticalSec, wayfindingSec },
+      entranceUsed: entrance,
+      verticalModeResolved
+    };
+  }
+
   //two get and one post
   //post: add an obstacle
   //get: gives way
