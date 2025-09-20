@@ -153,6 +153,7 @@ class GeminiObstacleDetector:
             url = f"{self.base_url}?key={self.api_key}"
             response = requests.post(url, headers=headers, json=payload, timeout=30)
             
+            
             if response.status_code != 200:
                 return {
                     'is_obstacle': False,
