@@ -1,0 +1,19 @@
+# FastAPI and web server dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Image processing
+Pillow==10.1.0
+
+# HTTP requests for Gemini API
+requests==2.31.0
+
+# Navigation and geospatial
+numpy==1.24.3
+scipy==1.11.4
+pyproj==3.6.1
+
+# Optional: For development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
