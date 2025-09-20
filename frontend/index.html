@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapbox Route with Obstacles</title>
+  <link
+    href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css"
+    rel="stylesheet"
+  />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif;
+    }
+    
+    #map { 
+      position: absolute; 
+      top: 0; 
+      bottom: 0; 
+      width: 100%; 
+    }
+    
+    .route-controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 1000;
+      min-width: 300px;
+    }
+    
+    .input-group {
+      margin-bottom: 15px;
+    }
+    
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .input-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    .add-obstacle-btn {
+      width: 100%;
+      padding: 12px;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.3s;
+    }
+    
+    .add-obstacle-btn:hover {
+      background: #e55a2b;
+    }
+    
+
+    .obstacle-popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .obstacle-popup.show {
+      display: flex;
+    }
+    
+    .popup-content {
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      max-width: 400px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    
+    .popup-header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    
+    .popup-header h2 {
+      margin: 0;
+      color: #333;
+      font-size: 24px;
+    }
+    
+    .close-btn {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #999;
+    }
+    
+    .close-btn:hover {
+      color: #333;
+    }
+    
+    .camera-section {
+      margin-bottom: 25px;
+      text-align: center;
+    }
+    
+    .camera-btn {
+      display: inline-block;
+      padding: 15px 25px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+      margin-bottom: 15px;
+    }
+    
+    .camera-btn:hover {
+      background: #45a049;
+    }
+    
+    .camera-input {
+      display: none;
+    }
+    
+    .photo-preview {
+      max-width: 100%;
+      max-height: 200px;
+      border-radius: 8px;
+      margin-top: 10px;
+      display: none;
+    }
+    
+    .obstacle-input-section {
+      margin-bottom: 25px;
+    }
+    
+    .obstacle-input-section label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .obstacle-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    .gps-section {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 25px;
+    }
+    
+    .gps-section h3 {
+      margin: 0 0 10px 0;
+      color: #333;
+      font-size: 16px;
+    }
+    
+    .gps-coords {
+      font-family: monospace;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .submit-section {
+      text-align: center;
+    }
+    
+    .submit-btn {
+      padding: 15px 30px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+      margin-right: 10px;
+    }
+    
+    .submit-btn:hover {
+      background: #0056b3;
+    }
+    
+    .cancel-btn {
+      padding: 15px 30px;
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .cancel-btn:hover {
+      background: #5a6268;
+    }
+  </style>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div id="map"></div>
+  
+
+  <div class="route-controls">
+    <div class="input-group">
+      <label for="from-input">From:</label>
+      <input type="text" id="from-input" placeholder="Enter starting location">
+    </div>
+    
+    <div class="input-group">
+      <label for="to-input">To:</label>
+      <input type="text" id="to-input" placeholder="Enter destination">
+    </div>
+    
+    <button class="add-obstacle-btn" onclick="openObstaclePopup()">
+       Add an Obstacle
+    </button>
+  </div>
+  
+
+  <div class="obstacle-popup" id="obstaclePopup">
+    <div class="popup-content">
+      <button class="close-btn" onclick="closeObstaclePopup()">&times;</button>
+      
+      <div class="popup-header">
+        <h2>Report an Obstacle</h2>
+      </div>
+      
+      <div class="camera-section">
+        <button class="camera-btn" onclick="triggerCamera()">
+           Take Photo
+        </button>
+        <input type="file" class="camera-input" id="cameraInput" accept="image/*" capture="environment" onchange="previewPhoto(event)">
+        <img class="photo-preview" id="photoPreview" alt="Photo preview">
+      </div>
+      
+      <div class="obstacle-input-section">
+        <label for="obstacleDescription">What obstacle did you experience on the route?</label>
+        <textarea class="obstacle-input" id="obstacleDescription" placeholder="Describe the obstacle )"></textarea>
+      </div>
+      
+      <div class="gps-section">
+        <h3> Current GPS Coordinates</h3>
+        <div class="gps-coords" id="gpsCoords">
+          Getting location...
+        </div>
+      </div>
+      
+      <div class="submit-section">
+        <button class="submit-btn" onclick="submitObstacle()">Submit Report</button>
+        <button class="cancel-btn" onclick="closeObstaclePopup()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
