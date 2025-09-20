@@ -66,10 +66,49 @@ export type OutdoorParams = {
     coreToDestMetersOverride?: number;
   };
 
-  //need helpers to: calculate shortest distance between lat long points, calculate shortest distance between
-  // great circle distance: shortest possible path between two points on the surface of a sphere
 
+//helper methods
+//computes great-circle distance between two lat/long points using haversine
+function haversineMeters(a: LatLng, b: LatLng): number {
+    const R = 6371000; //earths radius in m
+    const dLat = (Math.PI/180) * (b.lat - a.lat); //convert degree to radian, make haversine term, return distance m
+    const dLng = (Math.PI/180) * (b.lng - a.lng);
+    const lat1 = (Math.PI/180) * a.lat;
+    const lat2 = (Math.PI/180) * b.lat;
+    const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  
+  //choose closest entrance through haversine distance and return closest one
+  function pickEntrance(origin: LatLng, entrances: BuildingEntrance[]): BuildingEntrance {
+    let best = entrances[0], bestD = Infinity;
+    for (const e of entrances) {
+      const d = haversineMeters(origin, e.location);
+      if (d < bestD) { best = e; bestD = d; }
+    }
+    return best;
+  }
+  
   //ask mapbox for walking route and return duration, throws error for no token
-//defaults to walking, build url with origin/destination as long/lat pairs
-// fetch url, error if bad
-// parse json
+  //defaults to walking, build url with origin/destination as long/lat pairs
+  // fetch url, error if bad
+  // parse json
+  
+  async function getOutdoorDurationSec(origin: LatLng, dest: LatLng, p?: OutdoorParams): Promise<number> {
+    // if no token provided require the caller to pass precomputedOutdoorDurationSec instead
+    if (!p?.mapboxToken) {
+      throw new Error("No Mapbox token. Pass precomputedOutdoorDurationSec to avoid network calls.");
+    }
+    const profile = p.walkProfile ?? "walking";
+    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?alternatives=false&geometries=geojson&overview=false&steps=false&access_token=${p.mapboxToken}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Mapbox Directions error: ${res.status}`);
+    const json = await res.json();
+    const duration = json?.routes?.[0]?.duration;
+    if (typeof duration !== "number") throw new Error("No route found");
+    return duration; // seconds
+  }
+
+  //two get and one post
+  //post: add an obstacle
+  //get: gives way
