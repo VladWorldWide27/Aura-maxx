@@ -32,7 +32,7 @@ export type BuildingMeta = {
 
 export type VerticalMode = "stairs" | "elevator" | "auto";
 
-export type IndoorParams = {
+export type IndoorParams = { //from above
   verticalMode?: VerticalMode; //default "stairs"
   stairsSecondsPerFloor?: number; //default physics-based if not set
   elevatorWaitSeconds?: number; //default 30
@@ -42,3 +42,34 @@ export type IndoorParams = {
   transitionPenaltySec?: number; //default 12 (entry/security)
   wayfindingPenaltySec?: number; //default 8
 };
+export type OutdoorParams = {
+    //pass mapbox token here to enable the routing
+    mapboxToken?: string;
+    walkProfile?: "walking" | "walking-traffic";
+  };
+  
+  // input for eta, requires origin, building, targetfloor
+  export type EstimateOptions = {
+    origin: LatLng; //start point
+    building: BuildingMeta; //destination building metadata
+    targetFloor: number;
+    preferredEntranceId?: string; //pick a specific entrance (optional)
+    indoor?: IndoorParams;
+    outdoor?: OutdoorParams;
+  
+    //AVOID network call during dev:
+    //if set, skip mapbox and just use provided outdoor seconds
+    precomputedOutdoorDurationSec?: number;
+  
+    // for indoor distances from own floorplan/graph
+    indoorToCoreMetersOverride?: number;
+    coreToDestMetersOverride?: number;
+  };
+
+  //need helpers to: calculate shortest distance between lat long points, calculate shortest distance between
+  // great circle distance: shortest possible path between two points on the surface of a sphere
+
+  //ask mapbox for walking route and return duration, throws error for no token
+//defaults to walking, build url with origin/destination as long/lat pairs
+// fetch url, error if bad
+// parse json
