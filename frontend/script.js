@@ -138,7 +138,7 @@ function getCurrentGPS() {
   );
 }
 
-function submitObstacle() {
+async function submitObstacle() {
   const description = document.getElementById('obstacleDescription').value;
   const photoFile = document.getElementById('cameraInput').files[0];
   
@@ -147,14 +147,84 @@ function submitObstacle() {
     return;
   }
   
+  if (!photoFile) {
+    alert('Please take a photo of the obstacle before submitting.');
+    return;
+  }
   
-  console.log('Obstacle Report:', {
-    description: description,
-    photo: photoFile,
-    coordinates: currentPosition,
-    timestamp: new Date().toISOString()
-  });
+  if (!currentPosition) {
+    alert('GPS location is required. Please wait for location to be detected.');
+    return;
+  }
   
-  alert('Obstacle report submitted successfully!');
-  closeObstaclePopup();
+  // Show loading state
+  const submitBtn = document.querySelector('.submit-btn');
+  const originalText = submitBtn.textContent;
+  submitBtn.textContent = 'Analyzing with AI...';
+  submitBtn.disabled = true;
+  
+  try {
+    // Create FormData for multipart upload
+    const formData = new FormData();
+    formData.append('image', photoFile);
+    formData.append('gps_coordinates', JSON.stringify({
+      lat: currentPosition.lat,
+      lng: currentPosition.lng
+    }));
+    formData.append('description', description);
+    
+    // Send to FastAPI backend
+    const response = await fetch('/report-obstacle', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Show results to user
+    if (result.analysis.is_obstacle) {
+      alert(`✅ AI Analysis Complete!\n\nObstacle Detected: YES\nType: ${result.analysis.obstacle_type}\nConfidence: ${result.analysis.confidence}\n\nThe obstacle has been added to our database and will be considered for route planning.`);
+    } else {
+      alert(`✅ AI Analysis Complete!\n\nObstacle Detected: NO\nThe AI did not detect any significant obstacles in your photo.\n\nThank you for helping to keep our navigation data accurate!`);
+    }
+    
+    console.log('Obstacle Analysis Result:', result);
+    closeObstaclePopup();
+    
+  } catch (error) {
+    console.error('Error submitting obstacle report:', error);
+    alert(`❌ Error submitting obstacle report:\n${error.message}\n\nPlease check your internet connection and try again.`);
+  } finally {
+    // Restore button state
+    submitBtn.textContent = originalText;
+    submitBtn.disabled = false;
+  }
 }
+
+// Add function to check Gemini service status
+async function checkGeminiStatus() {
+  try {
+    const response = await fetch('/gemini-status');
+    const status = await response.json();
+    
+    if (!status.gemini_available) {
+      console.warn('Gemini obstacle detection service is not available');
+      // You could show a warning to the user here if needed
+    }
+    
+    return status.gemini_available;
+  } catch (error) {
+    console.error('Error checking Gemini status:', error);
+    return false;
+  }
+}
+
+// Check service status when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  checkGeminiStatus();
+});
