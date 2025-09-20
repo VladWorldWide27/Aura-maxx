@@ -1,0 +1,35 @@
+
+1) North Bouquet St 
+2) Fifth Avenue
+3) O'Hara Street
+4) Desoto Street
+5) Thackeray Street
+6) University Place
+
+## Street Connections
+# Fomat: [{node_id}] {street_id}_{left/right sidewalk}<-->{street_id}_{left/right sidewalk} {f/s - first/second conn} - {latitude}, {longitude}
+# f/s  (order) is detirmined this way: West to East, then South to North; Should be replaced with 1, 2, ... . Letters are for readabilitty
+[1] 1_left<-->2_left f - 40.442520, -79.957635
+[2] 1_right<-->2_right s - 40.442620, -79.957493
+
+[3] 1_left<-->3_right f - 40.443481, -79.959320
+[4] 1_right<-->3_right s - 40.443567, -79.959207
+
+[4] 3_left<-->4_right f - 40.443265, -79.959894
+[5] 3_right<-->4_right s - 40.443179, -79.959727
+
+[6] 3_right<-->5_left f - 40.444347, -79.958129
+[7] 3_right<-->5_right s - 40.444427, -79.958021
+
+[8] 5_left<-->2_left f - 40.443174, -79.956715
+[9] 5_right<-->2_left s - 40.443267, -79.956584
+
+[10] 3_right<-->6_left f - 40.444977, -79.957268
+[11] 3_right<-->6_right s - 40.445049, -79.957152
+
+[12] 6_left<-->2_left f - 40.443839, -79.955865
+[13] 6_right<-->2_left s - 40.443918, -79.955747
+
+## Sidewalks - links between nodes -- all pairs above are connected with sidewalks;
+# Need to add more sidewalks with the non edge nodes
+# 1_left<-->1_right 1 - [3]<-->[4]
