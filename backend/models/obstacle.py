@@ -1,10 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
-
-class Coordinates(BaseModel):
-    lat: float
-    lng: float
+from coords import Coordinates
 
 class Obstacle(BaseModel):
     description: str = Field(..., example="Construction blocking sidewalk")
