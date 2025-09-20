@@ -1,138 +1,141 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-import json
-from gemini_obstacle_detector import GeminiObstacleDetector
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List
+from datetime import datetime
+import uuid
 
-app = FastAPI()
+from obstacle import Obstacle
+from graph_node import GraphNode
+from graph_edge import GraphEdge
+from database import obstacles_collection, nodes_collection, edges_collection
 
-# Initialize Gemini detector
-try:
-    gemini_detector = GeminiObstacleDetector()
-except ValueError as e:
-    print(f"Warning: Gemini detector not initialized: {e}")
-    gemini_detector = None
+app = FastAPI(title="Hackathon Navigation API")
 
-obstacles=[] # in memory tracker
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class Obstacle(BaseModel):
-    location: str
-    description: str
-    obstacle_type: Optional[str] = None
-    is_verified: Optional[bool] = False
-    gps_coordinates: Optional[dict] = None
-
-class ObstacleReport(BaseModel):
-    gps_coordinates: dict  # {"lat": float, "lng": float}
-    description: str
-    is_obstacle: bool
-    obstacle_type: str
-
-#get directions
-@app.get("/directions")
-def get_directions(start: str, end: str):
-    return {
-        "start": start,
-        "end": end,
-        "directions": [
-            f"Walk straight from {start}",
-            "Turn xxx after xxx",
-            f"Arrive at {end}"
-        ],
-        "obstacles": obstacles
-    }
-
-#get obstacles
+# Obstacle Endpoints 
 @app.get("/obstacles", response_model=List[Obstacle])
-def get_obstacles():
-    return obstacles
-
-#post- add obstacles
-@app.post("/obstacles")
-def add_obstacle(obstacle: Obstacle):
-    obstacles.append(obstacle)
-    return {"message": "Obstacle added", "obstacle": obstacle}
-
-#post- report obstacle with image analysis
-@app.post("/report-obstacle")
-async def report_obstacle(
-    image: UploadFile = File(...),
-    gps_coordinates: str = Form(...),
-    description: str = Form(...)
-):
-    """
-    Report an obstacle with image verification using Gemini AI.
-    
-    Args:
-        image: Uploaded image file (JPG/PNG)
-        gps_coordinates: JSON string with lat/lng coordinates
-        description: User description of the obstacle
-    
-    Returns:
-        Analysis result and obstacle information
-    """
-    if not gemini_detector:
-        raise HTTPException(status_code=503, detail="Obstacle detection service not available. Please set GEMINI_API_KEY environment variable.")
-    
+async def get_obstacles():
+    """Get all active obstacles"""
     try:
-        # Parse GPS coordinates
-        gps_data = json.loads(gps_coordinates)
-        if 'lat' not in gps_data or 'lng' not in gps_data:
-            raise ValueError("GPS coordinates must include 'lat' and 'lng'")
+        cursor = obstacles_collection.find({"active": True})
+        obstacles = []
+        async for obstacle in cursor:
+            # Convert MongoDB _id to string and remove it
+            obstacle.pop("_id", None)
+            obstacles.append(Obstacle(**obstacle))
+        return obstacles
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/obstacles")
+async def add_obstacle(obstacle: Obstacle):
+    """Add new obstacle report"""
+    try:
+        # Convert Pydantic model to dict
+        obstacle_dict = obstacle.dict()
+        obstacle_dict["_id"] = str(uuid.uuid4())  # Add unique ID
         
-        lat = float(gps_data['lat'])
-        lng = float(gps_data['lng'])
+        # Store in MongoDB
+        result = await obstacles_collection.insert_one(obstacle_dict)
         
-        # Validate image file
-        if not image.content_type or not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        # Read image data
-        image_data = await image.read()
-        
-        # Analyze with Gemini
-        analysis_result = gemini_detector.verify_obstacle(image_data, (lat, lng))
-        
-        # Create obstacle report
-        obstacle_report = {
-            "gps_coordinates": {"lat": lat, "lng": lng},
-            "description": description,
-            "is_obstacle": analysis_result['is_obstacle'],
-            "obstacle_type": analysis_result['obstacle_type'],
-            "confidence": analysis_result['confidence'],
-            "analysis_error": analysis_result.get('error'),
-            "timestamp": None  # You can add timestamp if needed
+        return {
+            "message": "Obstacle added successfully",
+            "id": obstacle_dict["_id"],
+            "obstacle": obstacle
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Graph Node Endpoints
+@app.get("/nodes", response_model=List[GraphNode])
+async def get_nodes():
+    """Get all graph nodes"""
+    try:
+        cursor = nodes_collection.find({"active": True})
+        nodes = []
+        async for node in cursor:
+            node.pop("_id", None)
+            nodes.append(GraphNode(**node))
+        return nodes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/nodes")
+async def add_node(node: GraphNode):
+    """Add new graph node"""
+    try:
+        node_dict = node.dict()
+        node_dict["_id"] = node_dict["nodeId"]  # Use nodeId as _id
         
-        # If Gemini confirms it's an obstacle, add to obstacles list
-        if analysis_result['is_obstacle'] and not analysis_result.get('error'):
-            obstacle = Obstacle(
-                location=f"{lat}, {lng}",
-                description=description,
-                obstacle_type=analysis_result['obstacle_type'],
-                is_verified=True,
-                gps_coordinates={"lat": lat, "lng": lng}
-            )
+        result = await nodes_collection.insert_one(node_dict)
+        
+        return {
+            "message": "Node added successfully",
+            "node": node
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Graph Edge Endpoints
+@app.get("/edges", response_model=List[GraphEdge])
+async def get_edges():
+    """Get all graph edges"""
+    try:
+        cursor = edges_collection.find({"active": True})
+        edges = []
+        async for edge in cursor:
+            edge.pop("_id", None)
+            edges.append(GraphEdge(**edge))
+        return edges
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/edges")
+async def add_edge(edge: GraphEdge):
+    """Add new graph edge"""
+    try:
+        edge_dict = edge.dict()
+        edge_dict["_id"] = edge_dict["edgeId"]  # Use edgeId as _id
+        
+        result = await edges_collection.insert_one(edge_dict)
+        
+        return {
+            "message": "Edge added successfully",
+            "edge": edge
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Directions
+@app.get("/directions")
+async def get_directions(start: str, end: str):
+    """Get directions with current obstacles"""
+    try:
+        # Get obstacles from database
+        cursor = obstacles_collection.find({"active": True})
+        obstacles = []
+        async for obstacle in cursor:
+            obstacle.pop("_id", None)
             obstacles.append(obstacle)
         
         return {
-            "message": "Obstacle report processed successfully",
-            "analysis": obstacle_report,
-            "added_to_obstacles": analysis_result['is_obstacle'] and not analysis_result.get('error')
+            "start": start,
+            "end": end,
+            "directions": [
+                f"Walk straight from {start}",
+                "Turn right after 200m",
+                f"Arrive at {end}"
+            ],
+            "obstacles": obstacles
         }
-        
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid GPS coordinates format")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing obstacle report: {str(e)}")
-
-# Health check endpoint for Gemini service
-@app.get("/gemini-status")
-def gemini_status():
-    """Check if Gemini obstacle detection service is available."""
-    return {
-        "gemini_available": gemini_detector is not None,
-        "status": "ready" if gemini_detector else "api_key_missing"
-    }
+        raise HTTPException(status_code=500, detail=str(e))
+        
