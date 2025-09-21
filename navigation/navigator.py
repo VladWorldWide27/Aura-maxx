@@ -64,18 +64,35 @@ class Graph:
         return [list(self.nodes[nid].gps_coords)[::-1] for nid in path_ids if nid in self.nodes]
 
 class Navigator:
-    def __init__(self, storage):
+    def __init__(self, storage, graph_file_path=None):
         self.storage = storage
         self.obstacles = []         # List of dicts: {'id', 'coords', 'timestamp'}
         self.unavailable_ids = set()
-        # Get static graph
-        # sgraph = self.storage.get_statqic_graph()
-        sgraph = [
-            {'id': 0, 'gps_coords': (40.442520, -79.957635), 'name': 'P0', 'links': [1]},
-            {'id': 1, 'gps_coords': (40.442574, -79.957729), 'name': 'P1', 'links': [0, 2]},
-            {'id': 2, 'gps_coords': (40.442628, -79.957824), 'name': 'P2', 'links': [1, 3]},
-            {'id': 3, 'gps_coords': (40.442682, -79.957918), 'name': 'P3', 'links': [2]},
-        ]
+        
+        # Try to get graph from file first, then storage, then use minimal fallback
+        if graph_file_path:
+            try:
+                self.graph = self.graph_from_file(graph_file_path)
+            except (FileNotFoundError, Exception) as e:
+                print(f"Warning: Could not load graph from file {graph_file_path}: {e}")
+                self.graph = self._get_fallback_graph()
+        elif self.storage:
+            try:
+                # Get static graph from storage if available
+                sgraph = self.storage.get_static_graph()
+                self.graph = Graph(sgraph)
+            except (AttributeError, Exception):
+                # Fallback to file if storage doesn't have graph method
+                try:
+                    self.graph = self.graph_from_file("navigation/graph_points.txt")
+                except (FileNotFoundError, Exception):
+                    self.graph = self._get_fallback_graph()
+        else:
+            # No storage provided, try to load from default file
+            try:
+                self.graph = self.graph_from_file("navigation/graph_points.txt")
+            except (FileNotFoundError, Exception):
+                self.graph = self._get_fallback_graph()
 
         # Get obstacles
         # obstacles = self.storage.get_obstacles()
@@ -83,7 +100,17 @@ class Navigator:
         # Construct graph
         # for obstacle in obstacles:
         #     sgraph.add_obstacle(obstacle)
-        self.graph = Graph(sgraph)
+    
+    def _get_fallback_graph(self):
+        """Provide minimal fallback graph for basic functionality"""
+        sgraph = [
+            {'id': 0, 'gps_coords': (40.442520, -79.957635), 'name': 'P0', 'links': [1]},
+            {'id': 1, 'gps_coords': (40.442574, -79.957729), 'name': 'P1', 'links': [0, 2]},
+            {'id': 2, 'gps_coords': (40.442628, -79.957824), 'name': 'P2', 'links': [1, 3]},
+            {'id': 3, 'gps_coords': (40.442682, -79.957918), 'name': 'P3', 'links': [2]},
+        ]
+        print("Warning: Using minimal fallback graph. Consider providing a proper graph file.")
+        return Graph(sgraph)
 
     def add_obstacle(self, gps_coords):
         """

@@ -175,7 +175,9 @@ async function getDirections() {
     // Call your FastAPI backend
     console.log(`Getting directions from ${startCoords.lat}, ${startCoords.lng} to ${endCoords.lat}, ${endCoords.lng}`);
     
-    const response = await fetch(`http://127.0.0.1:8000/directions?start_lat=${startCoords.lat}&start_lng=${startCoords.lng}&end_lat=${endCoords.lat}&end_lng=${endCoords.lng}`);
+    // Use relative URL to work in both development and production
+    const baseUrl = window.location.protocol + '//' + window.location.host;
+    const response = await fetch(`${baseUrl}/directions?start_lat=${startCoords.lat}&start_lng=${startCoords.lng}&end_lat=${endCoords.lat}&end_lng=${endCoords.lng}`);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

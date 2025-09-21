@@ -14,8 +14,29 @@ from PIL import Image as PILImage  # ← ADD THIS IMPORT
 from backend.models.obstacle import Obstacle, Coordinates
 from backend.models.graph_node import GraphNode
 from backend.models.graph_edge import GraphEdge
-from backend.models.database import obstacles_collection, nodes_collection, edges_collection
-from gemini_obstacle_detector import GeminiObstacleDetector
+
+# Try to import database collections, fallback if not available
+try:
+    from backend.models.database import obstacles_collection, nodes_collection, edges_collection
+    database_available = True
+    print("✅ Database connection available")
+except Exception as e:
+    print(f"⚠️  Warning: Database not available: {e}")
+    obstacles_collection = None
+    nodes_collection = None
+    edges_collection = None
+    database_available = False
+
+# Try to import Gemini detector, fallback if not available
+try:
+    from gemini_obstacle_detector import GeminiObstacleDetector
+    gemini_detector = GeminiObstacleDetector()
+    gemini_available = True
+    print("✅ Gemini obstacle detector initialized successfully")
+except Exception as e:
+    print(f"⚠️  Warning: Gemini obstacle detector not available: {e}")
+    gemini_detector = None
+    gemini_available = False
 
 import sys
 from navigation.navigator import Navigator, Graph
@@ -34,14 +55,7 @@ app.add_middleware(
 app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 # Initialize Gemini detector with proper error handling
-try:
-    gemini_detector = GeminiObstacleDetector()
-    gemini_available = True
-    print("✅ Gemini obstacle detector initialized successfully")
-except Exception as e:
-    print(f"⚠️  Warning: Gemini obstacle detector not available: {e}")
-    gemini_detector = None
-    gemini_available = False
+# (Already handled above)
 
 # Health check endpoint
 @app.get("/")
@@ -50,7 +64,8 @@ async def root():
     return {
         "message": "Aura-maxx Navigation API is running",
         "status": "healthy",
-        "gemini_available": gemini_available
+        "gemini_available": gemini_available,
+        "database_available": database_available
     }
 
 # Obstacle Endpoints 
@@ -346,18 +361,21 @@ from fastapi import Query
 async def get_directions(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
     """Get real directions using your existing navigation system"""
     try:
-        # Create a navigator instance
-        navigator = Navigator(None)  # No storage needed since we'll build graph from database
-        
-        # Build graph from database instead of file
-        graph_data = await build_graph_from_database()
-        navigator.graph = Graph(graph_data)
+        # Create a navigator instance with the graph file
+        navigator = Navigator(None, "navigation/graph_points.txt")
         
         # Get obstacles from database and add them to navigator
-        obstacles_cursor = obstacles_collection.find({"active": True, "ai_verified": True})
-        async for obstacle in obstacles_cursor:
-            obs_coords = (obstacle['coords']['lat'], obstacle['coords']['lng'])
-            navigator.add_obstacle(obs_coords)
+        if database_available and obstacles_collection:
+            try:
+                obstacles_cursor = obstacles_collection.find({"active": True, "ai_verified": True})
+                async for obstacle in obstacles_cursor:
+                    obs_coords = (obstacle['coords']['lat'], obstacle['coords']['lng'])
+                    navigator.add_obstacle(obs_coords)
+            except Exception as db_error:
+                print(f"Warning: Could not load obstacles from database: {db_error}")
+                # Continue without obstacles
+        else:
+            print("Database not available, proceeding without obstacles")
         
         # Use your existing navigation method
         start_coords = (start_lat, start_lng)
@@ -387,6 +405,7 @@ async def get_directions(start_lat: float, start_lng: float, end_lat: float, end
             }
             
     except Exception as e:
+        print(f"Navigation error: {e}")
         raise HTTPException(status_code=500, detail=f"Navigation error: {str(e)}")
 
 
