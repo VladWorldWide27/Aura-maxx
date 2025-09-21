@@ -17,6 +17,9 @@ from backend.models.graph_edge import GraphEdge
 from backend.models.database import obstacles_collection, nodes_collection, edges_collection
 from gemini_obstacle_detector import GeminiObstacleDetector
 
+import sys
+from navigation.navigator import Navigator, Graph
+
 app = FastAPI(title="Hackathon Navigation API")
 
 app.add_middleware(
@@ -340,73 +343,88 @@ async def add_edge(edge: GraphEdge):
 from fastapi import Query
 
 @app.get("/directions")
-async def get_directions(start: str = Query(...), end: str = Query(...)):
-    """
-    Get directions and route coordinates between start and end node names, include obstacles.
-    """
+async def get_directions(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
+    """Get real directions using your existing navigation system"""
     try:
-        # 1. Load graph from DB (you might want to cache this in production)
-        nodes_cursor = nodes_collection.find({"active": True})
-        edges_cursor = edges_collection.find({"active": True})
-        nodes = {}
-        links = {}
-        async for node in nodes_cursor:
-            pid = int(node["nodeId"]) if node["nodeId"].isdigit() else node["nodeId"]
-            nodes[pid] = {
-                'id': pid,
-                'gps_coords': (node["coordinates"]["lat"], node["coordinates"]["lng"]),
-                'name': node["name"],
-                'links': []
-            }
-        async for edge in edges_cursor:
-            src = int(edge["from"]) if str(edge["from"]).isdigit() else edge["from"]
-            dst = int(edge["to"]) if str(edge["to"]).isdigit() else edge["to"]
-            links.setdefault(src, []).append(dst)
-            links.setdefault(dst, []).append(src)
-        for pid, node in nodes.items():
-            node['links'] = links.get(pid, [])
-        graph = Graph(list(nodes.values()))
-        nav = Navigator(None)
-        nav.graph = graph
-
-        # 2. Lookup start/end node by name (case-insensitive)
-        start_node = next((n for n in nodes.values() if n['name'].strip().lower() == start.strip().lower()), None)
-        end_node = next((n for n in nodes.values() if n['name'].strip().lower() == end.strip().lower()), None)
-        if not start_node or not end_node:
-            raise HTTPException(status_code=404, detail="Start or end location not found.")
-
-        # 3. Add obstacles
-        obstacles_cursor = obstacles_collection.find({"active": True})
-        obstacles = []
+        # Create a navigator instance
+        navigator = Navigator(None)  # No storage needed since we'll build graph from database
+        
+        # Build graph from database instead of file
+        graph_data = await build_graph_from_database()
+        navigator.graph = Graph(graph_data)
+        
+        # Get obstacles from database and add them to navigator
+        obstacles_cursor = obstacles_collection.find({"active": True, "ai_verified": True})
         async for obstacle in obstacles_cursor:
-            nav.add_obstacle((obstacle["coords"]["lat"], obstacle["coords"]["lng"]))
-            obs = obstacle.copy()
-            obs.pop("_id", None)
-            obstacles.append(obs)
-
-        # 4. Pathfinding
-        route_coords = nav.navigate(start_node['gps_coords'], end_node['gps_coords'])
-        if not route_coords:
+            obs_coords = (obstacle['coords']['lat'], obstacle['coords']['lng'])
+            navigator.add_obstacle(obs_coords)
+        
+        # Use your existing navigation method
+        start_coords = (start_lat, start_lng)
+        end_coords = (end_lat, end_lng)
+        
+        route_coords = navigator.navigate(start_coords, end_coords)
+        
+        if route_coords:
             return {
-                "route": [],
-                "directions": ["No route found."],
-                "obstacles": obstacles
+                "start": {"lat": start_lat, "lng": start_lng},
+                "end": {"lat": end_lat, "lng": end_lng},
+                "path": route_coords,  # Your navigator returns [lng, lat] pairs
+                "success": True,
+                "obstacles_avoided": len(navigator.obstacles),
+                "directions": [
+                    "Follow the calculated route avoiding reported obstacles",
+                    f"Route avoids {len(navigator.obstacles)} obstacles",
+                    "Arrive at destination"
+                ]
             }
-        # Convert to [lng, lat] for Mapbox
-        route_coords_mapbox = [[lng, lat] for lat, lng in route_coords]
-
-        # 5. Directions (basic, can be improved)
-        directions = [
-            f"Start at {start_node['name']}",
-            "Proceed along the route.",
-            f"Arrive at {end_node['name']}"
-        ]
-
-        return {
-            "route": route_coords_mapbox,
-            "directions": directions,
-            "obstacles": obstacles
-        }
-
+        else:
+            return {
+                "start": {"lat": start_lat, "lng": start_lng},
+                "end": {"lat": end_lat, "lng": end_lng},
+                "error": "No path found - all routes may be blocked",
+                "success": False
+            }
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Navigation error: {str(e)}")
+
+
+async def build_graph_from_database():
+    """Convert your MongoDB data to the format your Navigator expects"""
+    
+    # Get all nodes from database
+    nodes_cursor = nodes_collection.find({"active": True})
+    edges_cursor = edges_collection.find({"active": True})
+    
+    # Build nodes in your navigator's expected format
+    graph_nodes = []
+    node_links = {}
+    
+    async for node in nodes_cursor:
+        node_data = {
+            'id': int(node['nodeId']),  # Your navigator expects integer IDs
+            'gps_coords': (node['coordinates']['lat'], node['coordinates']['lng']),
+            'name': node.get('name', f"Node_{node['nodeId']}"),
+            'links': []  # Will populate from edges
+        }
+        graph_nodes.append(node_data)
+    
+    # Build adjacency list from edges
+    async for edge in edges_cursor:
+        from_id = int(edge.get('from', edge.get('fromNodeId', 0)))
+        to_id = int(edge.get('to', edge.get('toNodeId', 0)))
+        
+        if from_id not in node_links:
+            node_links[from_id] = []
+        if to_id not in node_links:
+            node_links[to_id] = []
+            
+        node_links[from_id].append(to_id)
+        node_links[to_id].append(from_id)  # Bidirectional
+    
+    # Add links to nodes
+    for node in graph_nodes:
+        node['links'] = node_links.get(node['id'], [])
+    
+    return graph_nodes
