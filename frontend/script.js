@@ -61,6 +61,75 @@ function setupMap(center) {
     // Mark start & end
     new mapboxgl.Marker({ color: "green" }).setLngLat(routeCoords[0]).addTo(map);
     new mapboxgl.Marker({ color: "blue" }).setLngLat(routeCoords[routeCoords.length - 1]).addTo(map);
+
+    // accessible entrances to display (mapbox order: [lng, lat])
+const adaEntrances = [
+  //thackeray
+  {
+    name: "Thackeray Hall",
+    entrance: "University Place ground level doors",
+    coords: [-79.95725, 40.44432]
+  },
+
+  //old engineering
+  {
+    name: "Old Engineering Hall",
+    entrance: "O'Hara St entrance",
+    coords: [-79.958045, 40.444959]
+  },
+
+  //allen hall
+  {
+    name: "Allen Hall",
+    entrance: "O'Hara St entrance",
+    coords: [-79.95837, 40.44458]
+  },
+
+  //thaw hall
+  {
+    name: "Thaw Hall",
+    entrance: "SRCC/Thaw shared lobby on O'Hara St",
+    coords: [-79.95763, 40.44516]
+  },
+
+  //pitt public health
+  {
+    name: "Public Health Building",
+    entrance: "Fifth Ave main doors",
+    coords: [-79.95850, 40.44279]
+  },
+  {
+    name: "Public Health Building",
+    entrance: "De Soto St doors",
+    // slight east-side offset toward De Soto; tweak on site if needed
+    coords: [-79.95795, 40.44273]
+  }
+];
+
+// Simple wheelchair SVG you can reuse
+const wheelchairSVG = `
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M10 4a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm7.3 12.6-2.2-4.3H12V9h1.7l3.3 6.3 2 .1a1 1 0 1 1 0 2h-2a1 1 0 0 1-.7-.4zM9.5 12a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+  </svg>
+`;
+
+adaEntrances.forEach(({ name, entrance, coords }) => {
+  const el = document.createElement("div");
+  el.className = "ada-marker";
+  el.innerHTML = wheelchairSVG;
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `${name} accessible entrance: ${entrance}`);
+
+  const popupHtml = `
+    <strong>${name}</strong><br>${entrance}
+    <div class="coord">[${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}]</div>
+  `;
+
+  new mapboxgl.Marker({ element: el })
+    .setLngLat(coords)
+    .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
+    .addTo(map);
+});
   });
 }
 

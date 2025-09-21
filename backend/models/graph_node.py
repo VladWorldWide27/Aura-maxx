@@ -1,9 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-
-class Coordinates(BaseModel):
-    lat: float
-    lng: float
+from coords import Coordinates
 
 class GraphNode(BaseModel):
     nodeId: str = Field(..., example="N123")

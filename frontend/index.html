@@ -242,6 +242,25 @@
     .cancel-btn:hover {
       background: #5a6268;
     }
+    .ada-marker { /* added more accesibility points for thackeray hall, old engineering hall, allen hall, thaw hall, and pitt public health building*/
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: #0052a5; /* pitt blue*/
+      display: grid; place-items: center;
+      box-shadow: 0 0 0 2px #fff, 0 1px 6px rgba(0,0,0,.35);
+      cursor: pointer;
+    }
+    .ada-marker svg {
+      width: 18px; height: 18px;
+      fill: #fff;
+    }
+    .mapboxgl-popup-content {
+      font: 13px/1.45 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .coord {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px; color: #666;
+    }
   </style>
   <script src="script.js" defer></script>
 </head>
