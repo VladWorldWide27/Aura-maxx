@@ -141,80 +141,82 @@ function getCurrentGPS() {
 async function submitObstacle() {
   const description = document.getElementById('obstacleDescription').value;
   const photoFile = document.getElementById('cameraInput').files[0];
-  
+
   if (!description.trim()) {
     alert('Please describe the obstacle before submitting.');
     return;
   }
-  
   if (!photoFile) {
     alert('Please take a photo of the obstacle before submitting.');
     return;
   }
-  
   if (!currentPosition) {
     alert('GPS location is required. Please wait for location to be detected.');
     return;
   }
-  
-  // Show loading state
+
   const submitBtn = document.querySelector('.submit-btn');
   const originalText = submitBtn.textContent;
-  submitBtn.textContent = 'Analyzing with AI...';
+  submitBtn.textContent = 'Compressing...';
   submitBtn.disabled = true;
-  
+
   try {
-    // Create FormData for multipart upload
+    // Compress before upload
+    const compressedFile = await compressImage(photoFile, 800, 0.7);
+
     const formData = new FormData();
-    formData.append('image', photoFile);
+    formData.append('image', compressedFile);
     formData.append('gps_coordinates', JSON.stringify({
       lat: currentPosition.lat,
       lng: currentPosition.lng
     }));
     formData.append('description', description);
-    
-    // Send to FastAPI backend
-    const response = await fetch('/report-obstacle', {
+
+    const response = await fetch('http://127.0.0.1:8000/report-obstacle', {
       method: 'POST',
       body: formData
     });
-    
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      let errorMsg;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.detail || `HTTP error! status: ${response.status}`;
+      } catch {
+        errorMsg = `Non-JSON error response (status ${response.status})`;
+      }
+      throw new Error(errorMsg);
     }
-    
+
     const result = await response.json();
-    
-    // Show results to user
+
     if (result.analysis.is_obstacle) {
-      alert(`✅ AI Analysis Complete!\n\nObstacle Detected: YES\nType: ${result.analysis.obstacle_type}\nConfidence: ${result.analysis.confidence}\n\nThe obstacle has been added to our database and will be considered for route planning.`);
+      alert(`✅ Obstacle detected!\nType: ${result.analysis.obstacle_type}\nConfidence: ${result.analysis.confidence}`);
     } else {
-      alert(`✅ AI Analysis Complete!\n\nObstacle Detected: NO\nThe AI did not detect any significant obstacles in your photo.\n\nThank you for helping to keep our navigation data accurate!`);
+      alert(`✅ No obstacle detected.\nThe way looks clear.`);
     }
-    
-    console.log('Obstacle Analysis Result:', result);
+
+    console.log("AI Result:", result);
     closeObstaclePopup();
-    
+
   } catch (error) {
     console.error('Error submitting obstacle report:', error);
-    alert(`❌ Error submitting obstacle report:\n${error.message}\n\nPlease check your internet connection and try again.`);
+    alert(`❌ Error: ${error.message}`);
   } finally {
-    // Restore button state
     submitBtn.textContent = originalText;
     submitBtn.disabled = false;
   }
 }
 
+
 // Add function to check Gemini service status
 async function checkGeminiStatus() {
   try {
-    const response = await fetch('/gemini-status');
+    const response = await fetch('http://127.0.0.1:8000/gemini-status');  // ✅ absolute URL
     const status = await response.json();
     
     if (!status.gemini_available) {
       console.warn('Gemini obstacle detection service is not available');
-      // You could show a warning to the user here if needed
     }
     
     return status.gemini_available;
@@ -223,6 +225,40 @@ async function checkGeminiStatus() {
     return false;
   }
 }
+
+async function compressImage(file, maxWidth = 800, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onload = event => {
+      const img = new Image();
+      img.src = event.target.result;
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scaleSize = maxWidth / img.width;
+        canvas.width = maxWidth;
+        canvas.height = img.height * scaleSize;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(
+          blob => {
+            resolve(new File([blob], file.name, { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          quality // compression quality (0–1)
+        );
+      };
+
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
 
 // Check service status when page loads
 document.addEventListener('DOMContentLoaded', function() {
