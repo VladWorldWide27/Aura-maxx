@@ -1,22 +1,82 @@
-BetterPath: Accessible, community informed navigation.
+# BetterPath: Accessible Navigation on Campus 
 
-Built for SteelHacks XII
+**Built for SteelHacks XII**  
 
-Contributors: Simon Goldin (Simongoldin06@gmail.com), Vladimir Deianov (Deyanovva@gmail.com), Diana Lysova (dianaelysova@gmail.com), Evgenii Venediktov (e.i.venediktov@gmail.com)
+---
 
-Languages, frameworks, and libraries: MapBox API, Gemini API, Python, TypeScript. JavaScrip, MongoDB, Atlas
+##  Contributors  
+- Simon Goldin — [Simongoldin06@gmail.com](mailto:Simongoldin06@gmail.com)  
+- Vladimir Deianov — [Deyanovva@gmail.com](mailto:Deyanovva@gmail.com)  
+- Diana Lysova — [dianaelysova@gmail.com](mailto:dianaelysova@gmail.com)  
+- Evgenii Venediktov — [e.i.venediktov@gmail.com](mailto:e.i.venediktov@gmail.com)  
 
-BetterPath is a navigation app that allows users to upload photos of hazards to further inform navigation and ETA. The project was designed with accessibility in mind, as it navigates users to the nearest accessible entrance.
+---
 
-The backend includes coords.py, database.py, graph_edge.py, graph_node.py, and obstacle.py, all of which serve as a comprehensive navigation framework that maps building and hazard coordinates.
-The frontend includes script.js and index.html, which create a visually appealing map interface for the user using MapBox API.
-The navigation components, build_graph.py, coordinate_calc.py, google_tts.py, graph_points.txt, navigator.py, requirements.txt, result_graph.txt, and streets_list.txt all fit into the backend and store the respective information needed.
-The eponymous fastAPI.py creates the API for our program.
-Photo validation comes from gemini_obstacle_detector.py, which takes a user uploaded photo, verifies the obstacle shown, and changes the navigation as a result of the photo's hazard.
-Optional vertical navigation comes from insideEstimate.ts, which estimates time to a specific floor and further focuses the ETA.
-Requirements.txt include our libraries.
+##  Languages, Frameworks, and Libraries  
+- MapBox API  
+- Gemini API  
+- Python  
+- TypeScript  
+- JavaScript  
+- MongoDB / Atlas  
 
-How to set up and install the project:
+---
 
-cd into the folder
-figure it out from there
+## 📖 Overview  
+**BetterPath** is a navigation app that allows users to upload photos of hazards to further inform navigation and ETA.  
+The project was designed with **accessibility in mind**, helping users find the nearest accessible entrance.  
+
+---
+
+## 📂 Project Structure  
+
+### Backend  
+- **Core Modules**  
+  - `coords.py`  
+  - `database.py`  
+  - `graph_edge.py`  
+  - `graph_node.py`  
+  - `obstacle.py`  
+  > Framework for mapping building and hazard coordinates. Database connectivity  
+
+- **Navigation Components**  
+  - `build_graph.py`  
+  - `coordinate_calc.py`  
+  - `google_tts.py`  
+  - `graph_points.txt`  
+  - `navigator.py`  
+  - `requirements.txt`  
+  - `result_graph.txt`  
+  - `streets_list.txt`  
+  > Handle graph calculation, pathfinding, and data storage.  
+
+- **API**  
+  - `fastAPI.py` — creates the  Fast API for the program.  
+
+- **Photo Validation**  
+  - `gemini_obstacle_detector.py` — verifies user-uploaded obstacle photos and updates navigation accordingly.  
+
+### Frontend  
+- `script.js`  
+- `index.html`  
+> Provides a **MapBox-powered** user interface for navigation.  
+
+### Optional Features  
+- `insideEstimate.ts` — estimates travel time to specific floors for vertical navigation.  
+
+---
+
+## 🤖 AI Tools Used  
+- GitHub Copilot  
+- Claude  
+
+---
+
+## 🚀 Setup & Installation  
+
+### Run Frontend  
+```bash
+cd frontend
+python -m http.server 8000 --bind 127.0.0.1
+### Backend in a separate terminal
+uvicorn fastAPI:app --reload --host 0.0.0.0 --port 8000
