@@ -17,5 +17,6 @@ Optional vertical navigation comes from insideEstimate.ts, which estimates time 
 Requirements.txt include our libraries.
 
 How to set up and install the project:
+
 cd into the folder
-figure it our from there
+figure it out from there
