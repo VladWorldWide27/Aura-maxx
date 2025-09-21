@@ -1,4 +1,4 @@
-BetterPath: Accessible, community informed navigation
+BetterPath: Accessible, community informed navigation.
 
 Built for SteelHacks XII
 
