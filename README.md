@@ -66,13 +66,13 @@ The project was designed with **accessibility in mind**, helping users find the 
 
 ---
 
-## 🤖 AI Tools Used  
+##  AI Tools Used  
 - GitHub Copilot  
 - Claude  
 
 ---
 
-## 🚀 Setup & Installation  
+##  Setup & Installation  
 
 ### Run Frontend  
 ```bash
