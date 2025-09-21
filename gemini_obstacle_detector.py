@@ -385,5 +385,5 @@ if __name__ == "__main__":
         print(f"Route narration error: {e}")
 
     # call using
-        #plan = detector.generate_accessible_directions(steps, user_profile, obstacles)
-        # detector.speak_plan(plan)
+        plan = detector.generate_accessible_directions(steps, user_profile, obstacles)
+        detector.speak_plan(plan)
