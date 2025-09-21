@@ -55,6 +55,25 @@
       box-sizing: border-box;
     }
     
+    .get-directions-btn {
+      width: 100%;
+      padding: 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      margin-bottom: 15px;
+      transition: background 0.3s;
+    }
+    
+    .get-directions-btn:hover {
+      background: #0056b3;
+    }
+    
     .add-obstacle-btn {
       width: 100%;
       padding: 12px;
@@ -278,6 +297,10 @@
       <label for="to-input">To:</label>
       <input type="text" id="to-input" placeholder="Enter destination">
     </div>
+    
+    <button class="get-directions-btn" onclick="getDirections()">
+      Get Directions
+    </button>
     
     <button class="add-obstacle-btn" onclick="openObstaclePopup()">
        Add an Obstacle
