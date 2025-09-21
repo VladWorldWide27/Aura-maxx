@@ -337,26 +337,76 @@ async def add_edge(edge: GraphEdge):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Directions
+from fastapi import Query
+
 @app.get("/directions")
-async def get_directions(start: str, end: str):
-    """Get directions with current obstacles"""
+async def get_directions(start: str = Query(...), end: str = Query(...)):
+    """
+    Get directions and route coordinates between start and end node names, include obstacles.
+    """
     try:
-        # Get obstacles from database
-        cursor = obstacles_collection.find({"active": True})
+        # 1. Load graph from DB (you might want to cache this in production)
+        nodes_cursor = nodes_collection.find({"active": True})
+        edges_cursor = edges_collection.find({"active": True})
+        nodes = {}
+        links = {}
+        async for node in nodes_cursor:
+            pid = int(node["nodeId"]) if node["nodeId"].isdigit() else node["nodeId"]
+            nodes[pid] = {
+                'id': pid,
+                'gps_coords': (node["coordinates"]["lat"], node["coordinates"]["lng"]),
+                'name': node["name"],
+                'links': []
+            }
+        async for edge in edges_cursor:
+            src = int(edge["from"]) if str(edge["from"]).isdigit() else edge["from"]
+            dst = int(edge["to"]) if str(edge["to"]).isdigit() else edge["to"]
+            links.setdefault(src, []).append(dst)
+            links.setdefault(dst, []).append(src)
+        for pid, node in nodes.items():
+            node['links'] = links.get(pid, [])
+        graph = Graph(list(nodes.values()))
+        nav = Navigator(None)
+        nav.graph = graph
+
+        # 2. Lookup start/end node by name (case-insensitive)
+        start_node = next((n for n in nodes.values() if n['name'].strip().lower() == start.strip().lower()), None)
+        end_node = next((n for n in nodes.values() if n['name'].strip().lower() == end.strip().lower()), None)
+        if not start_node or not end_node:
+            raise HTTPException(status_code=404, detail="Start or end location not found.")
+
+        # 3. Add obstacles
+        obstacles_cursor = obstacles_collection.find({"active": True})
         obstacles = []
-        async for obstacle in cursor:
-            obstacle.pop("_id", None)
-            obstacles.append(obstacle)
-        
+        async for obstacle in obstacles_cursor:
+            nav.add_obstacle((obstacle["coords"]["lat"], obstacle["coords"]["lng"]))
+            obs = obstacle.copy()
+            obs.pop("_id", None)
+            obstacles.append(obs)
+
+        # 4. Pathfinding
+        route_coords = nav.navigate(start_node['gps_coords'], end_node['gps_coords'])
+        if not route_coords:
+            return {
+                "route": [],
+                "directions": ["No route found."],
+                "obstacles": obstacles
+            }
+        # Convert to [lng, lat] for Mapbox
+        route_coords_mapbox = [[lng, lat] for lat, lng in route_coords]
+
+        # 5. Directions (basic, can be improved)
+        directions = [
+            f"Start at {start_node['name']}",
+            "Proceed along the route.",
+            f"Arrive at {end_node['name']}"
+        ]
+
         return {
-            "start": start,
-            "end": end,
-            "directions": [
-                f"Walk straight from {start}",
-                "Turn right after 200m",
-                f"Arrive at {end}"  
-            ],
+            "route": route_coords_mapbox,
+            "directions": directions,
             "obstacles": obstacles
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
