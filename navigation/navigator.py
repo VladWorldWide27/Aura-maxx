@@ -1,162 +1,202 @@
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 from scipy.spatial import KDTree
 import heapq
-import time
+import math
+from backend.models.database import nodes_collection, edges_collection, obstacles_collection
 
-class Node:
-    def __init__(self, node_id, gps_coords, name):
-        self.id = node_id
-        self.gps_coords = gps_coords  # (lat, lon)
-        self.name = name
-        self.links = []  # List of node ids
-
-class Graph:
-    def __init__(self, sgraph):
+class NavigationService:
+    def __init__(self):
         self.nodes = {}
+        self.edges = {}
+        self.building_nodes = {}  # Map building names to node IDs
+        self.kd_tree = None
         self.node_coords = []
         self.node_ids = []
-        # Build nodes from sgraph
-        for node_data in sgraph:
-            node = Node(node_data['id'], node_data['gps_coords'], node_data['name'])
-            node.links = node_data.get('links', [])
-            self.nodes[node.id] = node
-            self.node_coords.append(node.gps_coords)
-            self.node_ids.append(node.id)
-        self.kd_tree = KDTree(np.array(self.node_coords))
-
-    def find_nearest(self, gps_coords):
-        dist, idx = self.kd_tree.query(gps_coords)
-        node_id = self.node_ids[idx]
-        return self.nodes[node_id]
-
-    def neighbors(self, node_id):
-        return [self.nodes[nid] for nid in self.nodes[node_id].links if nid in self.nodes]
-
-    def distance(self, node1, node2):
-        # Haversine or Euclidean; here Euclidean for simplicity
-        return np.linalg.norm(np.array(node1.gps_coords) - np.array(node2.gps_coords))
-
-    def shortest_path(self, start_coords, end_coords, unavailable_ids=None):
-        start_node = self.find_nearest(start_coords)
-        end_node = self.find_nearest(end_coords)
-        unavailable_ids = unavailable_ids or set()
-        # Dijkstra's algorithm
-        queue = [(0, start_node.id, [])]
-        visited = set()
-        while queue:
-            cost, current_id, path = heapq.heappop(queue)
-            if current_id in visited or current_id in unavailable_ids:
-                continue
-            visited.add(current_id)
-            path = path + [current_id]
-            if current_id == end_node.id:
-                return path
-            for neighbor in self.neighbors(current_id):
-                if neighbor.id not in visited and neighbor.id not in unavailable_ids:
-                    heapq.heappush(queue, (
-                        cost + self.distance(self.nodes[current_id], neighbor),
-                        neighbor.id,
-                        path
-                    ))
-        return None
-
-    def ids_to_coords(self, path_ids):
-        return [list(self.nodes[nid].gps_coords)[::-1] for nid in path_ids if nid in self.nodes]
-
-class Navigator:
-    def __init__(self, storage):
-        self.storage = storage
-        self.obstacles = []         # List of dicts: {'id', 'coords', 'timestamp'}
-        self.unavailable_ids = set()
-        # Get static graph
-        # sgraph = self.storage.get_statqic_graph()
-        sgraph = [
-            {'id': 0, 'gps_coords': (40.442520, -79.957635), 'name': 'P0', 'links': [1]},
-            {'id': 1, 'gps_coords': (40.442574, -79.957729), 'name': 'P1', 'links': [0, 2]},
-            {'id': 2, 'gps_coords': (40.442628, -79.957824), 'name': 'P2', 'links': [1, 3]},
-            {'id': 3, 'gps_coords': (40.442682, -79.957918), 'name': 'P3', 'links': [2]},
-        ]
-
-        # Get obstacles
-        # obstacles = self.storage.get_obstacles()
-
-        # Construct graph
-        # for obstacle in obstacles:
-        #     sgraph.add_obstacle(obstacle)
-        self.graph = Graph(sgraph)
-
-    def add_obstacle(self, gps_coords):
-        """
-        Adds an obstacle at the nearest node to gps_coords.
-        Marks the node as unavailable for pathfinding.
-        """
-        node = self.graph.find_nearest(gps_coords)
-        self.unavailable_ids.add(node.id)
-        self.obstacles.append({
-            'id': node.id,
-            'coords': node.gps_coords,
-            'timestamp': time.time()
-        })
-
-    def navigate(self, start_coords, destination_coords):
-        path = self.graph.shortest_path(start_coords, destination_coords, unavailable_ids=self.unavailable_ids)
-        if path:
-            return self.graph.ids_to_coords(path)
-        else:
-            self.state = "No path found."
-            return None
-    
-    def graph_from_file(self, filepath):
-        """
-        Constructs a Graph object from a file with POINT and EDGE lines.
-        """
-        nodes = {}
-        links = {}
-        with open(filepath, "r") as f:
-            for line in f:
-                parts = line.strip().split()
-                if not parts:
-                    continue
-                if parts[0] == "POINT":
-                    pid = int(parts[1])
-                    lat = float(parts[2])
-                    lon = float(parts[3])
-                    name = parts[4] if len(parts) > 4 else f"P{pid}"
-                    nodes[pid] = {
-                        'id': pid,
-                        'gps_coords': (lat, lon),
-                        'name': name,
-                        'links': []
-                    }
-                elif parts[0] == "EDGE":
-                    src = int(parts[1])
-                    dst = int(parts[2])
-                    # Add links in both directions for undirected graph
-                    links.setdefault(src, []).append(dst)
-                    links.setdefault(dst, []).append(src)
-        # Attach links to nodes
-        for pid, node in nodes.items():
-            node['links'] = links.get(pid, [])
-        # Build and return the Graph
-        return Graph(list(nodes.values()))
-
         
+    async def initialize(self):
+        """Load graph data from MongoDB"""
+        await self._load_nodes()
+        await self._load_edges()
+        self._build_kdtree()
+        
+    async def _load_nodes(self):
+        """Load all active nodes from MongoDB"""
+        cursor = nodes_collection.find({"active": True})
+        self.nodes = {}
+        self.building_nodes = {}
+        self.node_coords = []
+        self.node_ids = []
+        
+        async for node_doc in cursor:
+            node_id = node_doc["nodeId"]
+            coords = node_doc["coordinates"]
+            lat, lng = coords["lat"], coords["lng"]
+            name = node_doc["name"]
+            node_type = node_doc.get("type", "waypoint")
+            
+            self.nodes[node_id] = {
+                "id": node_id,
+                "coords": (lat, lng),
+                "name": name,
+                "type": node_type,
+                "neighbors": []
+            }
+            
+            self.node_coords.append([lat, lng])
+            self.node_ids.append(node_id)
+            
+            # If this is a building entrance, add it to building_nodes
+            if node_type == "building" or "entrance" in name.lower():
+                # Use the building name as the key (clean it up)
+                building_name = name.lower().strip()
+                self.building_nodes[building_name] = node_id
+                
+    async def _load_edges(self):
+        """Load all active edges from MongoDB and build adjacency lists"""
+        cursor = edges_collection.find({"active": True})
+        
+        async for edge_doc in cursor:
+            from_node = edge_doc["from"]
+            to_node = edge_doc["to"]
+            
+            # Add bidirectional connections
+            if from_node in self.nodes:
+                self.nodes[from_node]["neighbors"].append(to_node)
+            if to_node in self.nodes:
+                self.nodes[to_node]["neighbors"].append(from_node)
+                
+    def _build_kdtree(self):
+        """Build KDTree for spatial queries"""
+        if self.node_coords:
+            self.kd_tree = KDTree(np.array(self.node_coords))
+            
+    def find_nearest_node(self, lat: float, lng: float) -> Optional[str]:
+        """Find the nearest node to given coordinates"""
+        if not self.kd_tree:
+            return None
+            
+        dist, idx = self.kd_tree.query([lat, lng])
+        return self.node_ids[idx]
+        
+    def get_building_node(self, building_name: str) -> Optional[str]:
+        """Get node ID for a building by name"""
+        building_name = building_name.lower().strip()
+        return self.building_nodes.get(building_name)
+        
+    def get_available_buildings(self) -> List[str]:
+        """Get list of all available building names"""
+        return list(self.building_nodes.keys())
+        
+    def haversine_distance(self, coord1: Tuple[float, float], coord2: Tuple[float, float]) -> float:
+        """Calculate distance between two GPS coordinates in meters"""
+        lat1, lng1 = coord1
+        lat2, lng2 = coord2
+        
+        # Convert to radians
+        lat1, lng1, lat2, lng2 = map(math.radians, [lat1, lng1, lat2, lng2])
+        
+        # Haversine formula
+        dlat = lat2 - lat1
+        dlng = lng2 - lng1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371000  # Earth's radius in meters
+        
+        return c * r
+        
+    async def get_blocked_nodes(self) -> set:
+        """Get set of node IDs that are blocked by obstacles"""
+        blocked_nodes = set()
+        cursor = obstacles_collection.find({"active": True, "ai_verified": True})
+        
+        async for obstacle in cursor:
+            coords = obstacle["coords"]
+            lat, lng = coords["lat"], coords["lng"]
+            
+            # Find nearest node to obstacle
+            nearest_node = self.find_nearest_node(lat, lng)
+            if nearest_node:
+                # Check if obstacle is close enough to block the node (within 10 meters)
+                node_coords = self.nodes[nearest_node]["coords"]
+                distance = self.haversine_distance((lat, lng), node_coords)
+                if distance <= 10:  # 10 meter threshold
+                    blocked_nodes.add(nearest_node)
+                    
+        return blocked_nodes
+        
+    async def find_path(self, start_building: str, end_building: str) -> Optional[Dict]:
+        """Find path between two buildings using Dijkstra's algorithm"""
+        # Get node IDs for buildings
+        start_node_id = self.get_building_node(start_building)
+        end_node_id = self.get_building_node(end_building)
+        
+        if not start_node_id or not end_node_id:
+            return None
+            
+        # Get blocked nodes from obstacles
+        blocked_nodes = await self.get_blocked_nodes()
+        
+        # Dijkstra's algorithm
+        distances = {node_id: float('inf') for node_id in self.nodes}
+        distances[start_node_id] = 0
+        previous = {}
+        visited = set()
+        
+        # Priority queue: (distance, node_id)
+        pq = [(0, start_node_id)]
+        
+        while pq:
+            current_dist, current_node = heapq.heappop(pq)
+            
+            if current_node in visited or current_node in blocked_nodes:
+                continue
+                
+            visited.add(current_node)
+            
+            if current_node == end_node_id:
+                # Reconstruct path
+                path = []
+                while current_node is not None:
+                    path.append(current_node)
+                    current_node = previous.get(current_node)
+                path.reverse()
+                
+                # Convert to coordinates for frontend
+                coordinates = []
+                for node_id in path:
+                    lat, lng = self.nodes[node_id]["coords"]
+                    coordinates.append([lng, lat])  # GeoJSON format [lng, lat]
+                    
+                return {
+                    "path_nodes": path,
+                    "coordinates": coordinates,
+                    "start_building": start_building,
+                    "end_building": end_building,
+                    "blocked_nodes": list(blocked_nodes)
+                }
+                
+            # Check neighbors
+            for neighbor_id in self.nodes[current_node]["neighbors"]:
+                if neighbor_id in visited or neighbor_id in blocked_nodes:
+                    continue
+                    
+                if neighbor_id not in self.nodes:
+                    continue
+                    
+                # Calculate distance to neighbor
+                current_coords = self.nodes[current_node]["coords"]
+                neighbor_coords = self.nodes[neighbor_id]["coords"]
+                edge_weight = self.haversine_distance(current_coords, neighbor_coords)
+                
+                new_distance = distances[current_node] + edge_weight
+                
+                if new_distance < distances[neighbor_id]:
+                    distances[neighbor_id] = new_distance
+                    previous[neighbor_id] = current_node
+                    heapq.heappush(pq, (new_distance, neighbor_id))
+                    
+        return None  # No path found
 
-nav = Navigator(None)
-# construct graph from file
-nav.graph = nav.graph_from_file("graph_points.txt")
-
-start_point = (40.443175, -79.956718) # Thackeray left and Fifth left
-dest_point = (40.445045, -79.957418) # OHara left and University Place left
-
-
-# add obstacle on Thackeray left sidewalk
-nav.add_obstacle((40.443889, -79.957565))
-# add obstacle on Thackeray right sidewalk
-nav.add_obstacle((40.443618, -79.957034))
-
-print(nav.unavailable_ids)
-# It has to offer route via University Place left sidewalk
-print(nav.navigate(start_point, dest_point))
-
-# Now you can use graph.shortest_path(...) etc.
+# Global navigation service instance
+navigation_service = NavigationService()
