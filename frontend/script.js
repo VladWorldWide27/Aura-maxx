@@ -241,15 +241,15 @@ async function getDirections() {
         console.log(`⚠️ Route avoids ${routeData.blocked_nodes.length} blocked nodes due to obstacles`);
       }
       
-      alert(`✅ Route found from ${fromBuilding} to ${toBuilding}!`);
+      alert(`Route found from ${fromBuilding} to ${toBuilding}!`);
       
     } else {
-      alert('❌ No route found between these buildings.');
+      alert('No route found between these buildings.');
     }
     
   } catch (error) {
     console.error('Error getting directions:', error);
-    alert(`❌ Error: ${error.message}`);
+    alert(`Error: ${error.message}`);
   } finally {
     button.textContent = originalText;
     button.disabled = false;
