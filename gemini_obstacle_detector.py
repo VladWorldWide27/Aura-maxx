@@ -11,7 +11,7 @@ class GeminiObstacleDetector:
         # ⚠️ SECURITY: Use environment variable instead of hardcoded key
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("❌ Missing GEMINI_API_KEY environment variable")
+            raise ValueError("Missing GEMINI_API_KEY environment variable")
         
         genai.configure(api_key=api_key)
         # Try different model names - use the most current one available
@@ -53,35 +53,35 @@ class GeminiObstacleDetector:
             # Generate content with better error handling
             try:
                 response = self.model.generate_content([prompt, image])
-                print(f"📥 Received response from Gemini")
+                print(f"Received response from Gemini")
                 
                 # Check for safety blocks
                 if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
                     if hasattr(response.prompt_feedback, 'block_reason'):
-                        print(f"🚫 Content blocked: {response.prompt_feedback.block_reason}")
+                        print(f"Content blocked: {response.prompt_feedback.block_reason}")
                         return self._create_error_response(f"Content blocked: {response.prompt_feedback.block_reason}")
 
                 # Check if response exists
                 if not response:
-                    print("❌ No response from Gemini API")
+                    print("No response from Gemini API")
                     return self._create_error_response("No response from Gemini API")
                 
                 # Check for text attribute
                 if not hasattr(response, 'text'):
-                    print("❌ Response object has no text attribute")
+                    print("Response object has no text attribute")
                     print(f"Response object: {dir(response)}")
                     return self._create_error_response("Response object has no text attribute")
                 
                 # Check if text is empty
                 if not response.text:
-                    print("❌ Empty text response from Gemini API")
+                    print("Empty text response from Gemini API")
                     return self._create_error_response("Empty text response from Gemini API")
 
                 response_text = response.text.strip()
-                print(f"📝 Raw Gemini response: '{response_text}'")
+                print(f"Raw Gemini response: '{response_text}'")
 
             except Exception as api_error:
-                print(f"❌ Gemini API error: {str(api_error)}")
+                print(f"Gemini API error: {str(api_error)}")
                 return self._create_error_response(f"Gemini API error: {str(api_error)}")
 
             # Clean response text
@@ -98,16 +98,16 @@ class GeminiObstacleDetector:
             if json_match:
                 json_text = json_match.group(0)
             else:
-                print(f"❌ No JSON found in response: '{text_out}'")
+                print(f"No JSON found in response: '{text_out}'")
                 return self._fallback_analysis(text_out, "No JSON structure found")
 
             # Parse JSON
             try:
                 analysis = json.loads(json_text)
-                print(f"✅ Successfully parsed JSON: {analysis}")
+                print(f"Successfully parsed JSON: {analysis}")
             except json.JSONDecodeError as json_error:
-                print(f"❌ JSON parse error: {json_error}")
-                print(f"❌ Attempted to parse: '{json_text}'")
+                print(f"JSON parse error: {json_error}")
+                print(f"Attempted to parse: '{json_text}'")
                 return self._fallback_analysis(text_out, str(json_error))
 
             # Validate and clean up the response
@@ -115,7 +115,7 @@ class GeminiObstacleDetector:
             return analysis
 
         except Exception as e:
-            print(f"❌ General error in verify_obstacle: {str(e)}")
+            print(f"General error in verify_obstacle: {str(e)}")
             return self._create_error_response(str(e))
 
     def _validate_response(self, analysis):
@@ -198,50 +198,192 @@ class GeminiObstacleDetector:
             "severity": "LOW" if is_obstacle else "NONE",
             "raw_response": raw_text
         }
+ 
+#text to speech methods
+    
+    def _extract_json_obj(self, text: str): #extracts json
+        import re, json
+        s = text.strip()
+        if s.startswith("```json"):
+            s = s.replace("```json", "").replace("```", "").strip()
+        elif s.startswith("```"):
+            s = s.replace("```", "").strip()
+        m = re.search(r"\{[\s\S]*\}", s)
+        if not m:
+            return None, s
+        jtxt = m.group(0)
+        try:
+            return json.loads(jtxt), jtxt
+        except Exception:
+            return None, jtxt
 
-# Test function to debug API connectivity
+    #generate directions from steps
+    def generate_accessible_directions(self, route_steps: list, user_profile: dict = None, obstacles: list = None):
+        """
+        route_steps: list of dicts like:
+          {"instruction": "...", "distance_m": 120, "duration_s": 90,
+           "start": {"lat": ..., "lng": ...}, "end": {"lat": ..., "lng": ...}}
+        obstacles: list of dicts like:
+          {"type": "STAIRS", "lat": ..., "lng": ..., "severity": "HIGH", "note": "..."}
+        """
+        user_profile = user_profile or {"mobility": "wheelchair", "preferences": {"avoid_stairs": True, "avoid_curbs": True}}
+        obstacles = obstacles or []
+
+        prompt = f"""
+You generate concise, **accessible** walking directions suitable for screen readers.
+
+User profile:
+{json.dumps(user_profile, ensure_ascii=False)}
+
+Route steps (ordered):
+{json.dumps(route_steps, ensure_ascii=False)}
+
+Known obstacles (may be empty):
+{json.dumps(obstacles, ensure_ascii=False)}
+
+Return **valid JSON only**:
+{{
+  "summary": "one-sentence overview",
+  "spoken_instructions": [
+    {{
+      "idx": 0,
+      "say": "Turn left on Forbes Ave for 100 meters.",
+      "expected_distance_m": 100,
+      "expected_duration_s": 80
+    }}
+  ]
+}}
+
+Rules:
+- Keep each 'say' under ~140 characters.
+- Use step instructions given; do not invent new streets.
+- If stairs/curbs/blocks exist, clearly warn and suggest an alternative using given steps if possible.
+        """.strip()
+
+        try: #try catch for errors
+            resp = self.model.generate_content(prompt)
+            txt = (getattr(resp, "text", "") or "").strip()
+        except Exception as e:
+            return {"error": f"Gemini error: {e}"}
+
+        data, raw = self._extract_json_obj(txt)
+        if not data:
+            return {"error": "No JSON in model output", "raw": txt or raw}
+
+        if "spoken_instructions" not in data or not isinstance(data["spoken_instructions"], list):
+            return {"error": "Model output missing 'spoken_instructions'", "raw": data}
+        return data
+
+    #helper: use macOS say if present, else print lines
+    def speak_plan(self, plan: dict, block: bool = True, pause_between: float = 0.25):
+        import shutil, subprocess, time
+        steps = plan.get("spoken_instructions", [])
+        if not steps:
+            print("No spoken_instructions to narrate.")
+            return
+
+        say_path = shutil.which("say")
+        if not say_path:
+            #print lines if not
+            for s in steps:
+                print("[TTS]", s.get("say", ""))
+                time.sleep(pause_between)
+            return
+
+        #mac tts
+        for s in steps:
+            line = s.get("say", "")
+            if not line:
+                continue
+            p = subprocess.Popen([say_path, line])
+            if block:
+                p.wait()
+            time.sleep(pause_between)
+
+#test function to debug API connectivity
 def test_gemini_connection():
     """Test if Gemini API is working"""
     try:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("❌ No API key found")
+            print("No API key found")
             return False
             
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash")
         
-        # Simple text test
+        #simple text test
         response = model.generate_content("Say 'Hello, API is working!'")
-        print(f"✅ API Test Response: {response.text}")
+        print(f"API Test Response: {response.text}")
         return True
         
     except Exception as e:
-        print(f"❌ API Test Failed: {e}")
+        print(f"API Test Failed: {e}")
         return False
 
-# Example usage with debugging
+#example usage with debugging
 if __name__ == "__main__":
-    # Test API connection first
-    print("🧪 Testing Gemini API connection...")
+    #test API connection first
+    print("Testing Gemini API connection")
     if not test_gemini_connection():
-        print("❌ API connection failed. Check your API key.")
+        print("API connection failed. Check your API key.")
         exit(1)
     
-    # Test detector
-    print("🧪 Testing obstacle detector...")
+    #test detector
+    print("Testing obstacle detector")
     detector = GeminiObstacleDetector()
     
-    # Test with image file
+    #test with image file
     try:
         with open("test_image.jpg", "rb") as f:
             image_bytes = f.read()
         
         result = detector.verify_obstacle(image_bytes, (0, 0))
-        print("🎯 Final result:")
+        print("Final result:")
         print(json.dumps(result, indent=2))
         
     except FileNotFoundError:
-        print("📁 Test image not found. Please provide a valid image file.")
+        print("Test image not found. Please provide a valid image file.")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
+    
+    #narration test
+    try:
+        steps = [
+            {
+                "instruction": "Head east on Fifth Ave toward Bigelow Blvd",
+                "distance_m": 120,
+                "duration_s": 90,
+                "start": {"lat": 40.4442, "lng": -79.9542},
+                "end": {"lat": 40.4446, "lng": -79.9530}
+            },
+            {
+                "instruction": "Turn left onto Bigelow Blvd",
+                "distance_m": 80,
+                "duration_s": 60,
+                "start": {"lat": 40.4446, "lng": -79.9530},
+                "end": {"lat": 40.4449, "lng": -79.9535}
+            }
+        ]
+
+        known_obstacles = [
+            {"type": "STAIRS", "lat": 40.44455, "lng": -79.95310, "severity": "HIGH", "note": "Temporary staircase at corner"}
+        ]
+
+        profile = {"mobility": "wheelchair", "preferences": {"avoid_stairs": True}}
+
+        print("Generating accessible spoken directions")
+        plan = detector.generate_accessible_directions(route_steps=steps, user_profile=profile, obstacles=known_obstacles)
+        print(json.dumps(plan, indent=2))
+
+        #auto speak (mac os say or print fallback)
+        if "error" not in plan:
+            detector.speak_plan(plan)
+        else:
+            print("Skipping TTS due to plan error.")
+    except Exception as e:
+        print(f"Route narration error: {e}")
+
+    # call using
+        #plan = detector.generate_accessible_directions(steps, user_profile, obstacles)
+        # detector.speak_plan(plan)
