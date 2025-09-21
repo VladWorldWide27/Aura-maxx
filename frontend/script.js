@@ -1,5 +1,5 @@
 mapboxgl.accessToken =
-  "Your token here"
+  "pk.eyJ1IjoiZGVpYW5vdnZ2IiwiYSI6ImNtZnR0Zm02YjBqd3kycXExMDIyZnBweTEifQ.d9eaakH2hSi0i-djIqrk0A"
 // this is vlad's key. since it is connected to my credit card, please, do not abuse it and create your own keys
 navigator.geolocation.getCurrentPosition(successLocation, errorLocation, {
   enableHighAccuracy: true
