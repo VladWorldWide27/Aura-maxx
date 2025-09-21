@@ -4,10 +4,10 @@ from typing import List
 from datetime import datetime
 import uuid
 
-from obstacle import Obstacle
-from graph_node import GraphNode
-from graph_edge import GraphEdge
-from database import obstacles_collection, nodes_collection, edges_collection
+from backend.models.obstacle import Obstacle
+from backend.models.graph_node import GraphNode
+from backend.models.graph_edge import GraphEdge
+from backend.models.database import obstacles_collection, nodes_collection, edges_collection
 
 from navigator import Navigator, Node, Graph
 
