@@ -10,6 +10,7 @@ import json
 import os
 import io  # ← ADD THIS IMPORT
 from PIL import Image as PILImage  # ← ADD THIS IMPORT
+from navigation_service import navigation_service
 
 from backend.models.obstacle import Obstacle, Coordinates
 from backend.models.graph_node import GraphNode
@@ -39,6 +40,29 @@ except Exception as e:
     print(f"⚠️  Warning: Gemini obstacle detector not available: {e}")
     gemini_detector = None
     gemini_available = False
+
+# Initialize navigation service on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    try:
+        await navigation_service.initialize()
+        print("✅ Navigation service initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Warning: Navigation service initialization failed: {e}")
+
+
+@app.get("/buildings")
+async def get_buildings():
+    """Get list of available buildings for navigation"""
+    try:
+        buildings = navigation_service.get_available_buildings()
+        return {
+            "buildings": buildings,
+            "count": len(buildings)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Health check endpoint
 @app.get("/")
@@ -339,24 +363,41 @@ async def add_edge(edge: GraphEdge):
 # Directions
 @app.get("/directions")
 async def get_directions(start: str, end: str):
-    """Get directions with current obstacles"""
+    """Get directions between two buildings"""
     try:
-        # Get obstacles from database
-        cursor = obstacles_collection.find({"active": True})
-        obstacles = []
-        async for obstacle in cursor:
-            obstacle.pop("_id", None)
-            obstacles.append(obstacle)
+        # Find path using navigation service
+        path_result = await navigation_service.find_path(start.lower().strip(), end.lower().strip())
+        
+        if not path_result:
+            # Try to suggest available buildings
+            available_buildings = navigation_service.get_available_buildings()
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No path found between '{start}' and '{end}'. Available buildings: {available_buildings}"
+            )
         
         return {
             "start": start,
             "end": end,
-            "directions": [
-                f"Walk straight from {start}",
-                "Turn right after 200m",
-                f"Arrive at {end}"  
-            ],
-            "obstacles": obstacles
+            "path_found": True,
+            "route_coordinates": path_result["coordinates"],
+            "path_nodes": path_result["path_nodes"],
+            "blocked_nodes": path_result["blocked_nodes"],
+            "message": f"Route found from {start} to {end}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/refresh-navigation")
+async def refresh_navigation():
+    """Refresh navigation data from database"""
+    try:
+        await navigation_service.initialize()
+        return {
+            "message": "Navigation service refreshed successfully",
+            "buildings_count": len(navigation_service.get_available_buildings())
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
