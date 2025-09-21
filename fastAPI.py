@@ -10,7 +10,7 @@ import json
 import os
 import io  # ← ADD THIS IMPORT
 from PIL import Image as PILImage  # ← ADD THIS IMPORT
-from navigation_service import navigation_service
+from navigation.navigation_service import navigation_service
 
 from backend.models.obstacle import Obstacle, Coordinates
 from backend.models.graph_node import GraphNode
