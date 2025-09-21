@@ -142,21 +142,21 @@ class Navigator:
 
         
 
-nav = Navigator(None)
-# construct graph from file
-nav.graph = nav.graph_from_file("graph_points.txt")
+# nav = Navigator(None)
+# # construct graph from file
+# nav.graph = nav.graph_from_file("graph_points.txt")
 
-start_point = (40.443175, -79.956718) # Thackeray left and Fifth left
-dest_point = (40.445045, -79.957418) # OHara left and University Place left
+# start_point = (40.443175, -79.956718) # Thackeray left and Fifth left
+# dest_point = (40.445045, -79.957418) # OHara left and University Place left
 
 
-# add obstacle on Thackeray left sidewalk
-nav.add_obstacle((40.443889, -79.957565))
-# add obstacle on Thackeray right sidewalk
-nav.add_obstacle((40.443618, -79.957034))
+# # add obstacle on Thackeray left sidewalk
+# nav.add_obstacle((40.443889, -79.957565))
+# # add obstacle on Thackeray right sidewalk
+# nav.add_obstacle((40.443618, -79.957034))
 
-print(nav.unavailable_ids)
-# It has to offer route via University Place left sidewalk
-print(nav.navigate(start_point, dest_point))
+# print(nav.unavailable_ids)
+# # It has to offer route via University Place left sidewalk
+# print(nav.navigate(start_point, dest_point))
 
-# Now you can use graph.shortest_path(...) etc.
+# # Now you can use graph.shortest_path(...) etc.
