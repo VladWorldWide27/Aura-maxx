@@ -90,6 +90,7 @@ function setupMap(center) {
         // slight east-side offset toward De Soto; tweak on site if needed
         coords: [-79.95795, 40.44273]
       }
+    
     ];
 
     // Simple wheelchair SVG you can reuse
@@ -115,7 +116,16 @@ function setupMap(center) {
         .setLngLat(coords)
         .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
         .addTo(map);
-    });
+    });  
+  });
+
+  map.on('click', (e) => { ///if no gps coords user can set their own
+    currentPosition = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+    const gpsDisplay = document.getElementById('gpsCoords');
+    if (gpsDisplay) {
+      gpsDisplay.innerHTML =
+        `Latitude: ${currentPosition.lat.toFixed(6)}<br>Longitude: ${currentPosition.lng.toFixed(6)}`;
+    }
   });
 }
 
@@ -228,8 +238,11 @@ async function submitObstacle() {
     alert('Please take a photo of the obstacle before submitting.');
     return;
   }
-  if (!currentPosition) {
-    alert('GPS location is required. Please wait for location to be detected.');
+
+  if (!currentPosition) { ///relaxed requirements
+    const center = map.getCenter();
+    currentPosition = { lat: center.lat, lng: center.lng };
+    //alert('GPS location is required. Please wait for location to be detected.');
     return;
   }
 
