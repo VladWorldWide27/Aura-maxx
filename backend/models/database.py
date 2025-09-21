@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 
-MONGO_URI = "mongodb+srv://<your_username>:<your_password>@hackathon-cluster.wt77kap.mongodb.net/?retryWrites=true&w=majority&appName=hackathon-cluster"
+MONGO_URI = "mongodb+srv://simongoldin06_db_user:hackmyth0ng334455@hackathon-cluster.wt77kap.mongodb.net/?retryWrites=true&w=majority&appName=hackathon-cluster"
 DB_NAME = "hackathon"
 
 client = AsyncIOMotorClient(MONGO_URI)
