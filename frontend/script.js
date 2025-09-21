@@ -184,14 +184,14 @@ function previewPhoto(event) {
 
 function getCurrentGPS() {
   const gpsDisplay = document.getElementById('gpsCoords');
-  
+
   if (!navigator.geolocation) {
     gpsDisplay.textContent = 'GPS not supported by this browser.';
     return;
   }
-  
+
   gpsDisplay.textContent = 'Getting current location...';
-  
+
   navigator.geolocation.getCurrentPosition(
     function(position) {
       const lat = position.coords.latitude.toFixed(6);
@@ -200,31 +200,21 @@ function getCurrentGPS() {
       currentPosition = { lat: parseFloat(lat), lng: parseFloat(lng) };
     },
     function(error) {
-      let errorMsg;
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMsg = 'Location access denied by user.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMsg = 'Location information unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMsg = 'Location request timed out.';
-          break;
-        default:
-          errorMsg = 'Unknown error getting location.';
-          break;
-      }
-      gpsDisplay.textContent = errorMsg;
-      console.error('Geolocation error:', error);
+      console.warn('Geolocation failed, falling back to map center.', error);
+      const center = map.getCenter();
+      const lat = center.lat.toFixed(6);
+      const lng = center.lng.toFixed(6);
+      gpsDisplay.innerHTML = `Latitude: ${lat}<br>Longitude: ${lng}`;
+      currentPosition = { lat: parseFloat(lat), lng: parseFloat(lng) };
     },
     {
       enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 60000
+      timeout: 8000,
+      maximumAge: 0
     }
   );
 }
+
 
 async function submitObstacle() {
   const description = document.getElementById('obstacleDescription').value;
