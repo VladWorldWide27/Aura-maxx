@@ -9,7 +9,7 @@ from backend.models.graph_node import GraphNode
 from backend.models.graph_edge import GraphEdge
 from backend.models.database import obstacles_collection, nodes_collection, edges_collection
 
-from navigator import Navigator, Node, Graph
+from navigation.navigator import Navigator, Node, Graph
 
 app = FastAPI(title="Hackathon Navigation API")
 
