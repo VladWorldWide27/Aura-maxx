@@ -141,74 +141,167 @@ function setupMap(center) {
 }
 
 // Fetch directions and draw route
-window.getDirections = async function() {
-  const fromName = document.getElementById("from-input").value;
-  const toName = document.getElementById("to-input").value;
-  const startId = findNodeIdByName(fromName);
-  const endId = findNodeIdByName(toName);
-
-  if (!startId || !endId) {
-    alert("Start or End location not found. Please select from the autocomplete list.");
+async function getDirections() {
+  const fromInput = document.getElementById('from-input').value.trim();
+  const toInput = document.getElementById('to-input').value.trim();
+  
+  if (!fromInput || !toInput) {
+    alert('Please enter both starting location and destination.');
     return;
   }
-  const startNode = nodeList.find(n => n.nodeId === startId);
-  const endNode = nodeList.find(n => n.nodeId === endId);
-
-  // Fetch directions from backend
-  const res = await fetch(`/directions?start=${encodeURIComponent(startId)}&end=${encodeURIComponent(endId)}`);
-  const data = await res.json();
-
-  // Remove previous route layer/source if any
-  if (map.getLayer(routeLayerId)) map.removeLayer(routeLayerId);
-  if (map.getSource(routeSourceId)) map.removeSource(routeSourceId);
-
-  // If your backend returns route coordinates, draw them
-  if (data.route && data.route.length > 0) {
-    map.addSource(routeSourceId, {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: data.route
+  
+  const btn = document.querySelector('.get-directions-btn');
+  const originalText = btn.textContent;
+  btn.textContent = 'Processing...';
+  btn.disabled = true;
+  
+  try {
+    // Parse input - could be coordinates or location names
+    const startCoords = await parseLocationInput(fromInput);
+    const endCoords = await parseLocationInput(toInput);
+    
+    if (!startCoords) {
+      alert('Could not understand starting location. Please try:\n• GPS coordinates: "40.443175, -79.956718"\n• Location name: "Thackeray Hall"');
+      return;
+    }
+    
+    if (!endCoords) {
+      alert('Could not understand destination. Please try:\n• GPS coordinates: "40.445053, -79.957415"\n• Location name: "Library"');
+      return;
+    }
+    
+    btn.textContent = 'Getting Route...';
+    
+    // Call your FastAPI backend
+    console.log(`Getting directions from ${startCoords.lat}, ${startCoords.lng} to ${endCoords.lat}, ${endCoords.lng}`);
+    
+    const response = await fetch(`http://127.0.0.1:8000/directions?start_lat=${startCoords.lat}&start_lng=${startCoords.lng}&end_lat=${endCoords.lat}&end_lng=${endCoords.lng}`);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Server error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success && result.path && result.path.length > 0) {
+      // Clear any existing route
+      if (map.getLayer('custom-route')) {
+        map.removeLayer('custom-route');
+      }
+      if (map.getSource('custom-route')) {
+        map.removeSource('custom-route');
+      }
+      
+      // Remove existing markers (you might want to keep them)
+      document.querySelectorAll('.mapboxgl-marker').forEach(marker => {
+        if (marker.style.backgroundColor === 'green' || marker.style.backgroundColor === 'blue') {
+          marker.remove();
         }
-      }
-    });
-    map.addLayer({
-      id: routeLayerId,
-      type: "line",
-      source: routeSourceId,
-      paint: {
-        "line-color": "#ff0000",
-        "line-width": 5
-      }
-    });
-    // Add start/end markers
-    new mapboxgl.Marker({ color: "green" }).setLngLat(data.route[0]).addTo(map);
-    new mapboxgl.Marker({ color: "blue" }).setLngLat(data.route[data.route.length - 1]).addTo(map);
-    map.fitBounds([data.route[0], data.route[data.route.length - 1]], { padding: 80 });
-  } else {
-    // If route not found, just show start/end markers
-    new mapboxgl.Marker({ color: "green" }).setLngLat([startNode.coordinates.lng, startNode.coordinates.lat]).addTo(map);
-    new mapboxgl.Marker({ color: "blue" }).setLngLat([endNode.coordinates.lng, endNode.coordinates.lat]).addTo(map);
-    map.flyTo({ center: [startNode.coordinates.lng, startNode.coordinates.lat], zoom: 16 });
-    alert("No route found.");
-  }
-
-  // Show directions text (if any)
-  if (data.directions) {
-    alert("Directions:\n" + data.directions.join("\n"));
-  }
-  // Show obstacles (if any)
-  if (data.obstacles && data.obstacles.length) {
-    data.obstacles.forEach(obs => {
-      new mapboxgl.Marker({ color: "#ff6b35" })
-        .setLngLat([obs.coords.lng, obs.coords.lat])
-        .setPopup(new mapboxgl.Popup().setHTML(`<b>Obstacle:</b><br>${obs.description}`))
+      });
+      
+      // Add new route from API response
+      map.addSource('custom-route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: result.path // Your API returns [lng, lat] pairs
+          }
+        }
+      });
+      
+      map.addLayer({
+        id: 'custom-route',
+        type: 'line',
+        source: 'custom-route',
+        paint: {
+          'line-color': '#ff0000',
+          'line-width': 5
+        }
+      });
+      
+      // Add start and end markers
+      new mapboxgl.Marker({ color: 'green' })
+        .setLngLat([startCoords.lng, startCoords.lat])
+        .setPopup(new mapboxgl.Popup().setHTML(`<strong>Start:</strong><br>${fromInput}`))
         .addTo(map);
-    });
+        
+      new mapboxgl.Marker({ color: 'blue' })
+        .setLngLat([endCoords.lng, endCoords.lat])
+        .setPopup(new mapboxgl.Popup().setHTML(`<strong>End:</strong><br>${toInput}`))
+        .addTo(map);
+      
+      // Fit map to show entire route
+      const bounds = new mapboxgl.LngLatBounds();
+      result.path.forEach(coord => bounds.extend(coord));
+      map.fitBounds(bounds, { padding: 50 });
+      
+      // Show success message
+      const obstacleMsg = result.obstacles_avoided > 0 
+        ? `\nRoute avoids ${result.obstacles_avoided} obstacles.`
+        : '';
+      
+      alert(`Route found successfully!${obstacleMsg}`);
+      
+    } else {
+      alert('No route found between those locations. All paths may be blocked by obstacles.');
+    }
+    
+  } catch (error) {
+    console.error('Error getting directions:', error);
+    alert(`Error getting directions: ${error.message}`);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
-};
+}
+
+async function parseLocationInput(input) {
+  // First, try to parse as GPS coordinates
+  const coordPattern = /^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/;
+  const match = input.match(coordPattern);
+  
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    
+    // Validate coordinate ranges
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      console.log(`Parsed coordinates: ${lat}, ${lng}`);
+      return { lat, lng };
+    }
+  }
+  
+  // If not coordinates, try geocoding with Mapbox
+  try {
+    console.log(`Geocoding location: ${input}`);
+    
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(input)}.json?` +
+      `access_token=${mapboxgl.accessToken}&` +
+      `proximity=-79.9532,40.4443&` + // Bias results toward Pittsburgh/CMU area
+      `limit=1`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Geocoding service error');
+    }
+    
+    const data = await response.json();
+    
+    if (data.features && data.features.length > 0) {
+      const [lng, lat] = data.features[0].center;
+      console.log(`Geocoded "${input}" to: ${lat}, ${lng}`);
+      return { lat, lng };
+    }
+  } catch (error) {
+    console.error('Geocoding error:', error);
+  }
+  
+  return null;
+}
 
 // ========== Obstacle Popup Logic ==========
 window.openObstaclePopup = function() {
