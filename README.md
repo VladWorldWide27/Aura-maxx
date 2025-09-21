@@ -1,6 +1,9 @@
 BetterPath: Accessible, community informed navigation
+
 Built for SteelHacks XII
+
 Contributors: Simon Goldin (Simongoldin06@gmail.com), Vladimir Deianov (Deyanovva@gmail.com), Diana Lysova (dianaelysova@gmail.com), Evgenii Venediktov (e.i.venediktov@gmail.com)
+
 Languages, frameworks, and libraries: MapBox API, Gemini API, Python, TypeScript, Node.js, MongoDB
 
 BetterPath is a navigation app that allows users to upload photos of hazards to further inform navigation and ETA. The project was designed with accessibility in mind, as it navigates users to the nearest accessible entrance.
