@@ -260,9 +260,9 @@ async function submitObstacle() {
     const result = await response.json();
 
     if (result.analysis.is_obstacle) {
-      alert(`✅ Obstacle detected!\nType: ${result.analysis.obstacle_type}\nConfidence: ${result.analysis.confidence}`);
+      alert(`Obstacle detected!\nType: ${result.analysis.obstacle_type}\nConfidence: ${result.analysis.confidence}`);
     } else {
-      alert(`✅ No obstacle detected.\nThe way looks clear.`);
+      alert(`No obstacle detected.\nThe way looks clear.`);
     }
 
     console.log("AI Result:", result);
@@ -270,7 +270,7 @@ async function submitObstacle() {
 
   } catch (error) {
     console.error('Error submitting obstacle report:', error);
-    alert(`❌ Error: ${error.message}`);
+    alert(`Error: ${error.message}`);
   } finally {
     submitBtn.textContent = originalText;
     submitBtn.disabled = false;

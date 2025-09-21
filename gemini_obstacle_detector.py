@@ -8,13 +8,13 @@ import re
 
 class GeminiObstacleDetector:
     def __init__(self):
-        # ⚠️ SECURITY: Use environment variable instead of hardcoded key
+        # SECURITY: Use environment variable instead of hardcoded key
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("Missing GEMINI_API_KEY environment variable")
         
         genai.configure(api_key=api_key)
-        # Try different model names - use the most current one available
+        # try different model names - use the most current one available
         try:
             self.model = genai.GenerativeModel("gemini-1.5-flash")
         except Exception:
@@ -25,15 +25,15 @@ class GeminiObstacleDetector:
 
     def verify_obstacle(self, image_bytes: bytes, coords: tuple):
         try:
-            # Convert raw bytes → PIL image
+            # convert raw bytes → PIL image
             image = Image.open(io.BytesIO(image_bytes))
             
-            # Resize image if too large (Gemini has size limits)
+            # resize image if too large (Gemini has size limits)
             max_size = 1024
             if image.width > max_size or image.height > max_size:
                 image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
-            # Simplified, more direct prompt
+            # simplified, more direct prompt
             prompt = """
             Analyze this image for accessibility obstacles. Look for stairs, curbs, barriers, debris, or anything blocking pedestrian paths.
 
@@ -50,23 +50,23 @@ class GeminiObstacleDetector:
 
             print(f"🔍 Sending image to Gemini API...")
             
-            # Generate content with better error handling
+            # generate content with better error handling
             try:
                 response = self.model.generate_content([prompt, image])
                 print(f"Received response from Gemini")
                 
-                # Check for safety blocks
+                # check for safety blocks
                 if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
                     if hasattr(response.prompt_feedback, 'block_reason'):
                         print(f"Content blocked: {response.prompt_feedback.block_reason}")
                         return self._create_error_response(f"Content blocked: {response.prompt_feedback.block_reason}")
 
-                # Check if response exists
+                # check if response exists
                 if not response:
                     print("No response from Gemini API")
                     return self._create_error_response("No response from Gemini API")
                 
-                # Check for text attribute
+                # check for text attribute
                 if not hasattr(response, 'text'):
                     print("Response object has no text attribute")
                     print(f"Response object: {dir(response)}")
